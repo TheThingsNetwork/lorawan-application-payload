@@ -38,12 +38,12 @@ var gpsKeyRegexp = regexp.MustCompile(`^gps_\d+$`)
 //   - latitudeDeg, longitudeDeg, height
 //   - gps_lat, gps_lng, gps_alt
 //   - gps_lat, gps_lng, gpsalt
-// And the following keys for accuracy:
+// And the following keys for accuracy in metres:
 //   - acc
 //   - accuracy
 //   - hacc
-//   - hdop
-//   - gps_hdop
+//
+// HDOP and satellite count are currently not used.
 //
 // All numeric values are assumed to be float64.
 //
@@ -101,13 +101,11 @@ func InferLocation(m map[string]interface{}) (res Location, ok bool) {
 	}
 
 	if ok {
-		// Check accuracy in fields. Horizontal dilution of precision is considered accuracy.
+		// Check accuracy in fields.
 		for _, ap := range []string{
 			"acc",
 			"accuracy",
-			"hacc",
-			"hdop",
-			"gps_hdop",
+			"hacc", // horizontal accuracy
 		} {
 			acc, hasAcc := m[ap].(float64)
 			if hasAcc {

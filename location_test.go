@@ -4,6 +4,7 @@
 package apppayload_test
 
 import (
+	"math"
 	"strconv"
 	"testing"
 
@@ -70,6 +71,24 @@ func TestInferLocation(t *testing.T) {
 				Accuracy:  4,
 			},
 			ok: true,
+		},
+		{
+			m: map[string]interface{}{
+				"latitude":  math.NaN(),
+				"longitude": float64(2),
+				"altitude":  float64(3),
+				"accuracy":  float64(4),
+			},
+			ok: false,
+		},
+		{
+			m: map[string]interface{}{
+				"latitude":  float64(1),
+				"longitude": float64(200),
+				"altitude":  float64(3),
+				"accuracy":  float64(4),
+			},
+			ok: false,
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {

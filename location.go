@@ -5,6 +5,7 @@ package apppayload
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 )
 
@@ -19,6 +20,18 @@ type Location struct {
 // GoString returns the textual representation of location.
 func (l Location) GoString() string {
 	return fmt.Sprintf("%f %f %fm ±%fm", l.Latitude, l.Longitude, l.Altitude, l.Accuracy)
+}
+
+// Valid returns if the location is valid.
+// A location is considered valid if all fields are well defined (not infinity or NaN),
+// latitude is between -90 and 90 degrees, and longitude is between -180 and 180 degrees.
+func (l Location) Valid() bool {
+	undefined := func(x float64) bool { return math.IsInf(x, 0) || math.IsNaN(x) }
+	if undefined(l.Latitude) || undefined(l.Longitude) || undefined(l.Altitude) || undefined(l.Accuracy) {
+		return false
+	}
+	bounded := func(x, low, high float64) bool { return low <= x && x <= high }
+	return bounded(l.Latitude, -90, 90) && bounded(l.Longitude, -180, 180)
 }
 
 // gpsKeyRegexp matches keys in the form of gps_#. These are commonly used by CayenneLPP in The Things Stack.
@@ -56,17 +69,23 @@ func InferLocation(m map[string]interface{}) (res Location, ok bool) {
 
 	// Check GPS location (field gps_#).
 	for k := range m {
-		if gpsKeyRegexp.MatchString(k) {
-			if vm, ok := m[k].(map[string]interface{}); ok {
-				lat, _ := vm["latitude"].(float64)
-				lon, _ := vm["longitude"].(float64)
-				alt, _ := vm["altitude"].(float64)
-				return Location{
-					Latitude:  lat,
-					Longitude: lon,
-					Altitude:  alt,
-				}, true
-			}
+		if !gpsKeyRegexp.MatchString(k) {
+			continue
+		}
+		vm, ok := m[k].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		lat, _ := vm["latitude"].(float64)
+		lon, _ := vm["longitude"].(float64)
+		alt, _ := vm["altitude"].(float64)
+		l := Location{
+			Latitude:  lat,
+			Longitude: lon,
+			Altitude:  alt,
+		}
+		if l.Valid() {
+			return l, true
 		}
 	}
 
@@ -86,33 +105,36 @@ func InferLocation(m map[string]interface{}) (res Location, ok bool) {
 	} {
 		lat, hasLat := m[pp.latKey].(float64)
 		lon, hasLon := m[pp.lonKey].(float64)
-		if !hasLat || !hasLon {
+		alt, _ := m[pp.altKey].(float64)
+		if !hasLat || !hasLon || (lat == 0 && lon == 0) {
 			continue
 		}
-		alt, _ := m[pp.altKey].(float64)
-		if lat != 0 || lon != 0 {
-			res, ok = Location{
-				Latitude:  lat,
-				Longitude: lon,
-				Altitude:  alt,
-			}, true
+		res, ok = Location{
+			Latitude:  lat,
+			Longitude: lon,
+			Altitude:  alt,
+		}, true
+		break
+	}
+
+	if !ok {
+		return
+	}
+
+	// Check accuracy in fields.
+	for _, ap := range []string{
+		"acc",
+		"accuracy",
+		"hacc", // horizontal accuracy
+	} {
+		if acc, hasAcc := m[ap].(float64); hasAcc {
+			res.Accuracy = acc
 			break
 		}
 	}
 
-	if ok {
-		// Check accuracy in fields.
-		for _, ap := range []string{
-			"acc",
-			"accuracy",
-			"hacc", // horizontal accuracy
-		} {
-			acc, hasAcc := m[ap].(float64)
-			if hasAcc {
-				res.Accuracy = acc
-				break
-			}
-		}
+	if !res.Valid() {
+		return Location{}, false
 	}
 
 	return

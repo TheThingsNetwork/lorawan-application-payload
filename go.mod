@@ -1,3 +1,3 @@
 module go.thethings.network/lorawan-application-payload
 
-go 1.16
+go 1.17
